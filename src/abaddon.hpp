@@ -120,6 +120,9 @@ public:
     [[nodiscard]] bool IsMainWindowActive();
     [[nodiscard]] Snowflake GetActiveChannelID() const noexcept;
 
+    using type_signal_main_window_focus_change = sigc::signal<void, bool>;
+    type_signal_main_window_focus_change signal_main_window_focus_change();
+
 protected:
     void RunFirstTimeDiscordStartup();
 
@@ -186,4 +189,6 @@ private:
     std::unique_ptr<MainWindow> m_main_window; // wah wah cant create a gtkstylecontext fuck you
 
     Notifications m_notifications;
+
+    type_signal_main_window_focus_change m_signal_main_window_focus_change;
 };

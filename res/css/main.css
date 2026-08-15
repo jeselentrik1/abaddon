@@ -192,3 +192,24 @@
 .classic-guild-list-guild box, .classic-guild-list-folder stack {
     padding-left: 10px;
 }
+
+.gif-favorites-picker {
+    padding: 0;
+}
+
+.gif-picker-title {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.gif-picker-item {
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.15);
+}
+
+.gif-picker-item:hover {
+    outline: 2px solid @theme_selected_bg_color;
+    outline-offset: -2px;
+}
+

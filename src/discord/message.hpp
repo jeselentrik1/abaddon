@@ -109,6 +109,7 @@ struct EmbedThumbnailData {
 
 struct EmbedVideoData {
     std::optional<std::string> URL;
+    std::optional<std::string> ProxyURL; // discord proxy
     std::optional<int> Height;
     std::optional<int> Width;
 

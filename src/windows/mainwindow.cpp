@@ -87,6 +87,17 @@ MainWindow::MainWindow()
 
     SetupMenu();
     SetupDND();
+
+    add_events(Gdk::FOCUS_CHANGE_MASK);
+    signal_focus_in_event().connect([this](GdkEventFocus *) -> bool {
+        queue_draw();
+        m_signal_focus_change.emit(true);
+        return false;
+    });
+    signal_focus_out_event().connect([this](GdkEventFocus *) -> bool {
+        m_signal_focus_change.emit(false);
+        return false;
+    });
 }
 
 void MainWindow::UpdateComponents() {
@@ -279,9 +290,11 @@ void MainWindow::SetupMenu() {
     m_menu_file_reload_css.set_label("Reload CSS");
     m_menu_file_clear_cache.set_label("Clear file cache");
     m_menu_file_dump_ready.set_label("Dump ready message");
+    m_menu_file_dump_gateway.set_label("Dump gateway messages");
     m_menu_file_sub.append(m_menu_file_reload_css);
     m_menu_file_sub.append(m_menu_file_clear_cache);
     m_menu_file_sub.append(m_menu_file_dump_ready);
+    m_menu_file_sub.append(m_menu_file_dump_gateway);
 
     m_menu_view.set_label("View");
     m_menu_view.set_submenu(m_menu_view_sub);
@@ -366,6 +379,9 @@ void MainWindow::SetupMenu() {
 
     m_menu_file_dump_ready.signal_toggled().connect([this]() {
         Abaddon::Get().GetDiscordClient().SetDumpReady(m_menu_file_dump_ready.get_active());
+    });
+    m_menu_file_dump_gateway.signal_toggled().connect([this]() {
+        Abaddon::Get().GetDiscordClient().SetDumpGateway(m_menu_file_dump_gateway.get_active());
     });
 
     m_menu_discord_add_recipient.signal_activate().connect([this] {
@@ -464,4 +480,8 @@ MainWindow::type_signal_action_view_pins MainWindow::signal_action_view_pins() {
 
 MainWindow::type_signal_action_view_threads MainWindow::signal_action_view_threads() {
     return m_signal_action_view_threads;
+}
+
+MainWindow::type_signal_focus_change MainWindow::signal_focus_change() {
+    return m_signal_focus_change;
 }

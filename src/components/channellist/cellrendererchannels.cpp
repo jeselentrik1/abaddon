@@ -355,17 +355,18 @@ void CellRendererChannels::render_vfunc_guild(const Cairo::RefPtr<Cairo::Context
             m_pixbuf_anim_iters[anim] = anim->get_iter(nullptr);
         auto pb_iter = m_pixbuf_anim_iters.at(anim);
 
-        const auto cb = [this, &widget, anim, icon_x, icon_y, icon_w, icon_h] {
-            if (m_pixbuf_anim_iters.at(anim)->advance())
-                widget.queue_draw_area(
-                    static_cast<int>(icon_x),
-                    static_cast<int>(icon_y),
-                    static_cast<int>(icon_w),
-                    static_cast<int>(icon_h));
-        };
-
-        if ((hover_only && is_hovered) || !hover_only)
+        if (((hover_only && is_hovered) || !hover_only) && Abaddon::Get().IsMainWindowActive()) {
+            const auto cb = [this, &widget, anim, icon_x, icon_y, icon_w, icon_h] {
+                if (!Abaddon::Get().IsMainWindowActive()) return;
+                if (m_pixbuf_anim_iters.at(anim)->advance())
+                    widget.queue_draw_area(
+                        static_cast<int>(icon_x),
+                        static_cast<int>(icon_y),
+                        static_cast<int>(icon_w),
+                        static_cast<int>(icon_h));
+            };
             Glib::signal_timeout().connect_once(sigc::track_obj(cb, widget), pb_iter->get_delay_time());
+        }
         if (hover_only && !is_hovered)
             m_pixbuf_anim_iters[anim] = anim->get_iter(nullptr);
 

@@ -43,6 +43,9 @@ public:
     ChatWindow *GetChatWindow();
     MemberList *GetMemberList();
 
+    using type_signal_focus_change = sigc::signal<void, bool>;
+    type_signal_focus_change signal_focus_change();
+
 private:
     void SetupMenu();
     void SetupDND();
@@ -85,6 +88,7 @@ private:
     Gtk::MenuItem m_menu_file_reload_css;
     Gtk::MenuItem m_menu_file_clear_cache;
     Gtk::CheckMenuItem m_menu_file_dump_ready;
+    Gtk::CheckMenuItem m_menu_file_dump_gateway;
 
     Gtk::MenuItem m_menu_view;
     Gtk::Menu m_menu_view_sub;
@@ -133,4 +137,6 @@ private:
     type_signal_action_add_recipient m_signal_action_add_recipient;
     type_signal_action_view_pins m_signal_action_view_pins;
     type_signal_action_view_threads m_signal_action_view_threads;
+
+    type_signal_focus_change m_signal_focus_change;
 };

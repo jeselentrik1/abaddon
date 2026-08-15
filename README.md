@@ -379,5 +379,6 @@ For example, memory_db would be set by adding `memory_db = true` under the line 
 |------------------|------------------------------------------------------------------------------|
 | `ABADDON_NO_FC`  | (Windows only) don't use custom font config                                  |
 | `ABADDON_CONFIG` | change path of configuration file to use. relative to cwd or can be absolute |
+| `ABADDON_GATEWAY_DUMP` | path to append every decompressed gateway WebSocket message (JSONL)     |
 
 </details>

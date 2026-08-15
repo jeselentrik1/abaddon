@@ -56,6 +56,19 @@ void DiscordClient::Start() {
     m_heartbeat_acked = true;
     m_client_connected = true;
     m_client_started = true;
+
+    // Opt-in dump of every decompressed gateway message (plaintext JSON, one per line)
+    if (const char *path = std::getenv("ABADDON_GATEWAY_DUMP")) {
+        if (m_gateway_dump_file == nullptr) {
+            m_gateway_dump_file = std::fopen(path, "ab");
+            m_gateway_dump_from_env = m_gateway_dump_file != nullptr;
+            if (m_gateway_dump_file != nullptr)
+                spdlog::get("discord")->warn("Dumping decompressed gateway messages to {}", path);
+            else
+                spdlog::get("discord")->error("Failed to open ABADDON_GATEWAY_DUMP={}", path);
+        }
+    }
+
     m_websocket.StartConnection(GetGatewayURL());
 }
 
@@ -72,9 +85,18 @@ bool DiscordClient::Stop() {
         m_store.ClearAll();
         m_guild_to_users.clear();
 
+        m_favorite_gifs.clear();
+        m_favorite_gifs_loaded = false;
+
         m_websocket.Stop();
 
         m_client_started = false;
+
+        if (m_gateway_dump_file != nullptr && m_gateway_dump_from_env) {
+            std::fclose(m_gateway_dump_file);
+            m_gateway_dump_file = nullptr;
+            m_gateway_dump_from_env = false;
+        }
 
         return true;
     }
@@ -1094,6 +1116,31 @@ void DiscordClient::FetchPinned(Snowflake id, const sigc::slot<void(std::vector<
     });
 }
 
+void DiscordClient::FetchFavoriteGIFs(const sigc::slot<void(std::vector<FavoriteGIF>)> &callback, bool force_refresh) {
+    if (!force_refresh && m_favorite_gifs_loaded) {
+        callback(m_favorite_gifs);
+        return;
+    }
+
+    m_http.MakeGET("/users/@me/settings-proto/2", [this, callback](const http::response_type &response) {
+        if (!CheckCode(response)) {
+            callback({});
+            return;
+        }
+
+        try {
+            const auto j = nlohmann::json::parse(response.text);
+            const auto settings = j.at("settings").get<std::string>();
+            m_favorite_gifs = DecodeFavoriteGIFsFromSettingsProto(settings);
+            m_favorite_gifs_loaded = true;
+            callback(m_favorite_gifs);
+        } catch (const std::exception &e) {
+            spdlog::get("discord")->error("Failed to decode favorite GIFs: {}", e.what());
+            callback({});
+        }
+    });
+}
+
 bool DiscordClient::CanModifyRole(Snowflake guild_id, Snowflake role_id, Snowflake user_id) const {
     const auto guild = *GetGuild(guild_id);
     if (guild.OwnerID == user_id) return true;
@@ -1441,6 +1488,30 @@ void DiscordClient::SetDumpReady(bool dump) {
     m_dump_ready = dump;
 }
 
+void DiscordClient::SetDumpGateway(bool dump) {
+    if (dump) {
+        if (m_gateway_dump_file != nullptr) return;
+        const std::string name = "./gateway-dump-" + Glib::DateTime::create_now_utc().format("%Y-%m-%d_%H-%M-%S").raw() + ".jsonl";
+        m_gateway_dump_file = std::fopen(name.c_str(), "wb");
+        m_gateway_dump_from_env = false;
+        if (m_gateway_dump_file != nullptr)
+            spdlog::get("discord")->warn("Dumping decompressed gateway messages to {}", name);
+        else
+            spdlog::get("discord")->error("Failed to open gateway dump file {}", name);
+    } else if (m_gateway_dump_file != nullptr && !m_gateway_dump_from_env) {
+        std::fclose(m_gateway_dump_file);
+        m_gateway_dump_file = nullptr;
+        spdlog::get("discord")->warn("Stopped dumping gateway messages");
+    }
+}
+
+void DiscordClient::DumpGatewayMessage(const std::string &str) {
+    if (m_gateway_dump_file == nullptr) return;
+    std::fwrite(str.data(), 1, str.size(), m_gateway_dump_file);
+    std::fputc('\n', m_gateway_dump_file);
+    std::fflush(m_gateway_dump_file);
+}
+
 bool DiscordClient::IsChannelMuted(Snowflake id) const noexcept {
     return m_muted_channels.find(id) != m_muted_channels.end();
 }
@@ -1572,6 +1643,8 @@ void DiscordClient::MessageDispatch() {
 }
 
 void DiscordClient::HandleGatewayMessage(std::string str) {
+    DumpGatewayMessage(str);
+
     GatewayMessage m;
     try {
         m = nlohmann::json::parse(str);

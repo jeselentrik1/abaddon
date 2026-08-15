@@ -5,6 +5,7 @@
 #include <gtkmm/image.h>
 #include <gtkmm/listboxrow.h>
 #include <gtkmm/textview.h>
+#include <set>
 #include "discord/discord.hpp"
 
 class ChatMessageItemContainer : public Gtk::EventBox {
@@ -25,17 +26,19 @@ public:
 
 protected:
     static void AddClickHandler(Gtk::Widget *widget, const std::string &);
+    void ComputeGIFEmbedURLs(const Message &data);
     Gtk::TextView *CreateTextComponent(const Message &data); // Message.Content
     void UpdateTextComponent(Gtk::TextView *tv);
     Gtk::Widget *CreateEmbedsComponent(const std::vector<EmbedData> &embeds);
     static Gtk::Widget *CreateEmbedComponent(const EmbedData &data); // Message.Embeds[0]
-    Gtk::Widget *CreateImageComponent(const std::string &proxy_url, const std::string &url, int inw, int inh);
+    Gtk::Widget *CreateImageComponent(const std::string &proxy_url, const std::string &url, int inw, int inh, bool animated = false);
     Gtk::Widget *CreateAttachmentComponent(const AttachmentData &data); // non-image attachments
     Gtk::Widget *CreateStickersComponent(const std::vector<StickerItem> &data);
     Gtk::Widget *CreateReactionsComponent(const Message &data);
     Gtk::Widget *CreateReplyComponent(const Message &data);
 
     static bool IsEmbedImageOnly(const EmbedData &data);
+    static bool IsEmbedGIF(const EmbedData &data);
 
     void HandleChannelMentions(const Glib::RefPtr<Gtk::TextBuffer> &buf);
     void HandleChannelMentions(Gtk::TextView *tv);
@@ -61,6 +64,10 @@ protected:
     Gtk::TextView *m_text_component = nullptr;
     Gtk::Widget *m_embed_component = nullptr;
     Gtk::Widget *m_reactions_component = nullptr;
+    std::set<std::string> m_gif_embed_urls;
+
+    // strip GIF embed URLs from message content
+    std::string StripGIFURLs(const std::string &content) const;
 
 public:
     typedef sigc::signal<void, Snowflake> type_signal_channel_click;

@@ -7,6 +7,7 @@
 #include "voiceclient.hpp"
 #include "voicestate.hpp"
 #include "websocket.hpp"
+#include "favoritegifs.hpp"
 #include <gdkmm/rgba.h>
 #include <sigc++/sigc++.h>
 #include <nlohmann/json.hpp>
@@ -17,6 +18,8 @@
 #include <zlib.h>
 #include <glibmm.h>
 #include <queue>
+#include <cstdio>
+#include <cstdlib>
 
 #ifdef GetMessage
 #undef GetMessage
@@ -189,6 +192,8 @@ public:
 
     void FetchPinned(Snowflake id, const sigc::slot<void(std::vector<Message>, DiscordError code)> &callback);
 
+    void FetchFavoriteGIFs(const sigc::slot<void(std::vector<FavoriteGIF>)> &callback, bool force_refresh = false);
+
     bool IsVerificationRequired(Snowflake guild_id) const;
     void GetVerificationGateInfo(Snowflake guild_id, const sigc::slot<void(std::optional<VerificationGateInfoObject>)> &callback);
     void AcceptVerificationGate(Snowflake guild_id, VerificationGateInfoObject info, const sigc::slot<void(DiscordError code)> &callback);
@@ -229,6 +234,7 @@ public:
     void SetUserAgent(const std::string &agent);
 
     void SetDumpReady(bool dump);
+    void SetDumpGateway(bool dump);
 
     bool IsChannelMuted(Snowflake id) const noexcept;
     bool IsGuildMuted(Snowflake id) const noexcept;
@@ -250,6 +256,10 @@ private:
     z_stream m_zstream;
 
     bool m_dump_ready = false;
+    FILE *m_gateway_dump_file = nullptr;
+    bool m_gateway_dump_from_env = false;
+
+    void DumpGatewayMessage(const std::string &str);
 
     static std::string GetAPIURL();
     static std::string GetGatewayURL();
@@ -417,6 +427,9 @@ private:
     Glib::Timer m_progress_cb_timer;
 
     std::set<Snowflake> m_channels_pinned_requested;
+
+    std::vector<FavoriteGIF> m_favorite_gifs;
+    bool m_favorite_gifs_loaded = false;
     std::set<Snowflake> m_channels_lazy_loaded;
 
     // signals

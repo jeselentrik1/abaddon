@@ -44,12 +44,14 @@ void from_json(const nlohmann::json &j, EmbedThumbnailData &m) {
 
 void to_json(nlohmann::json &j, const EmbedVideoData &m) {
     JS_IF("url", m.URL);
+    JS_IF("proxy_url", m.ProxyURL);
     JS_IF("height", m.Height);
     JS_IF("width", m.Width);
 }
 
 void from_json(const nlohmann::json &j, EmbedVideoData &m) {
     JS_O("url", m.URL);
+    JS_O("proxy_url", m.ProxyURL);
     JS_O("height", m.Height);
     JS_O("width", m.Width);
 }

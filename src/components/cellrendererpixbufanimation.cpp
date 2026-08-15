@@ -1,4 +1,5 @@
 #include "cellrendererpixbufanimation.hpp"
+#include "abaddon.hpp"
 #include <gdkmm/general.h>
 #include <glibmm/main.h>
 
@@ -78,11 +79,14 @@ void CellRendererPixbufAnimation::render_vfunc(const Cairo::RefPtr<Cairo::Contex
             m_pixbuf_animation_iters[anim] = anim->get_iter(nullptr);
         auto pb_iter = m_pixbuf_animation_iters.at(anim);
 
-        const auto cb = [this, &widget, anim] {
-            if (m_pixbuf_animation_iters.at(anim)->advance())
-                widget.queue_draw();
-        };
-        Glib::signal_timeout().connect_once(sigc::track_obj(cb, widget), pb_iter->get_delay_time());
+        if (Abaddon::Get().IsMainWindowActive()) {
+            const auto cb = [this, &widget, anim] {
+                if (!Abaddon::Get().IsMainWindowActive()) return;
+                if (m_pixbuf_animation_iters.at(anim)->advance())
+                    widget.queue_draw();
+            };
+            Glib::signal_timeout().connect_once(sigc::track_obj(cb, widget), pb_iter->get_delay_time());
+        }
         Gdk::Cairo::set_source_pixbuf(cr, pb_iter->get_pixbuf(), pix_x, pix_y);
         cr->rectangle(pix_x, pix_y, natural.width, natural.height);
         cr->fill();

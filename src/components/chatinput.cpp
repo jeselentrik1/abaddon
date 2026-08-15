@@ -121,6 +121,7 @@ ChatInputTextContainer::ChatInputTextContainer() {
     m_upload_button.set_halign(Gtk::ALIGN_CENTER);
     m_upload_button.set_valign(Gtk::ALIGN_CENTER);
     m_upload_button.get_style_context()->add_class(GTK_STYLE_CLASS_FLAT);
+    m_upload_button.set_tooltip_text("Upload file");
 
     m_upload_img.property_icon_name() = "document-send-symbolic";
     m_upload_img.property_icon_size() = Gtk::ICON_SIZE_LARGE_TOOLBAR;
@@ -131,7 +132,27 @@ ChatInputTextContainer::ChatInputTextContainer() {
         m_input.grab_focus();
     });
 
-    m_upload_box.pack_start(m_upload_button);
+    m_gif_button.set_image(m_gif_img);
+    m_gif_button.set_halign(Gtk::ALIGN_CENTER);
+    m_gif_button.set_valign(Gtk::ALIGN_CENTER);
+    m_gif_button.get_style_context()->add_class(GTK_STYLE_CLASS_FLAT);
+    m_gif_button.set_tooltip_text("Favorite GIFs");
+
+    m_gif_img.property_icon_name() = "image-x-generic-symbolic";
+    m_gif_img.property_icon_size() = Gtk::ICON_SIZE_LARGE_TOOLBAR;
+    m_gif_img.get_style_context()->add_class("message-input-gif-icon");
+
+    m_gif_button.signal_clicked().connect([this]() {
+        m_gif_picker.Popup(m_gif_button);
+    });
+
+    m_gif_picker.signal_gif_chosen().connect([this](const Glib::ustring &url) {
+        m_signal_gif_submit.emit(url);
+    });
+
+    m_upload_box.set_orientation(Gtk::ORIENTATION_VERTICAL);
+    m_upload_box.pack_start(m_upload_button, false, false);
+    m_upload_box.pack_start(m_gif_button, false, false);
     pack_start(m_upload_box, false, false);
     pack_start(m_input);
 
@@ -168,6 +189,10 @@ void ChatInputTextContainer::HideChooserIcon() {
 
 ChatInputTextContainer::type_signal_add_attachment ChatInputTextContainer::signal_add_attachment() {
     return m_signal_add_attachment;
+}
+
+ChatInputTextContainer::type_signal_gif_submit ChatInputTextContainer::signal_gif_submit() {
+    return m_signal_gif_submit;
 }
 
 ChatInputAttachmentContainer::ChatInputAttachmentContainer()
@@ -454,6 +479,12 @@ ChatInput::ChatInput()
             m_attachments.ClearNoPurge();
         }
         return b;
+    });
+
+    m_input.signal_gif_submit().connect([this](const Glib::ustring &url) -> bool {
+        ChatSubmitParams data;
+        data.Message = url;
+        return m_signal_submit.emit(data);
     });
 
     m_attachments.set_vexpand(false);

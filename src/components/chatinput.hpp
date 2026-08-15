@@ -10,6 +10,7 @@
 #include "discord/chatsubmitparams.hpp"
 #include "discord/message.hpp"
 #include "discord/permissions.hpp"
+#include "giffavoritespicker.hpp"
 
 class ChatInputAttachmentItem : public Gtk::EventBox {
 public:
@@ -129,14 +130,20 @@ private:
     Gtk::Box m_upload_box;
     Gtk::Button m_upload_button;
     Gtk::Image m_upload_img;
+    Gtk::Button m_gif_button;
+    Gtk::Image m_gif_img;
+    GifFavoritesPicker m_gif_picker;
     ChatInputText m_input;
 
 public:
     using type_signal_add_attachment = sigc::signal<void, Glib::RefPtr<Gio::File>>;
+    using type_signal_gif_submit = sigc::signal<bool, Glib::ustring>;
     type_signal_add_attachment signal_add_attachment();
+    type_signal_gif_submit signal_gif_submit();
 
 private:
     type_signal_add_attachment m_signal_add_attachment;
+    type_signal_gif_submit m_signal_gif_submit;
 };
 
 class ChatInput : public Gtk::Box {

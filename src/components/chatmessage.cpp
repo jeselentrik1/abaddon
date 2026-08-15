@@ -4,6 +4,7 @@
 #include "abaddon.hpp"
 #include "constants.hpp"
 #include "lazyimage.hpp"
+#include "videowidget.hpp"
 #include "misc/chatutil.hpp"
 #include "util.hpp"
 
@@ -26,7 +27,12 @@ ChatMessageItemContainer *ChatMessageItemContainer::FromMessage(const Message &d
     if (data.Nonce.has_value())
         container->Nonce = *data.Nonce;
 
-    if (!data.Content.empty() || data.Type != MessageType::DEFAULT) {
+    container->ComputeGIFEmbedURLs(data);
+
+    // Strip GIF embed URLs from content when showing inline GIF
+    const std::string content_stripped = container->StripGIFURLs(data.Content);
+
+    if ((!content_stripped.empty() && !std::all_of(content_stripped.begin(), content_stripped.end(), ::isspace)) || data.Type != MessageType::DEFAULT) {
         container->m_text_component = container->CreateTextComponent(data);
         container->m_main.add(*container->m_text_component);
     }
@@ -89,6 +95,10 @@ ChatMessageItemContainer *ChatMessageItemContainer::FromMessage(const Message &d
 // this doesnt rly make sense
 void ChatMessageItemContainer::UpdateContent() {
     const auto data = Abaddon::Get().GetDiscordClient().GetMessage(ID);
+    // Recompute GIF URLs in case embeds changed
+    m_gif_embed_urls.clear();
+    ComputeGIFEmbedURLs(*data);
+
     if (m_text_component != nullptr)
         UpdateTextComponent(m_text_component);
 
@@ -187,10 +197,14 @@ void ChatMessageItemContainer::UpdateTextComponent(Gtk::TextView *tv) {
     b->set_text("");
     Gtk::TextBuffer::iterator s, e;
     b->get_bounds(s, e);
+
+    // Strip GIF embed URLs from content
+    std::string content = StripGIFURLs(data->Content);
+
     switch (data->Type) {
         case MessageType::DEFAULT:
         case MessageType::INLINE_REPLY:
-            b->insert(s, data->Content);
+            b->insert(s, content);
             ChatUtil::HandleRoleMentions(b);
             ChatUtil::HandleUserMentions(b, ChannelID, false);
             HandleLinks(*tv);
@@ -217,7 +231,7 @@ void ChatMessageItemContainer::UpdateTextComponent(Gtk::TextView *tv) {
                     b->insert_markup(s, "<i>used <span color='#697ec4'>" + cmd + "</span> with " + app + "</i>");
                 }
             } else {
-                b->insert(s, data->Content);
+                b->insert(s, content);
                 ChatUtil::HandleUserMentions(b, ChannelID, false);
                 HandleLinks(*tv);
                 HandleChannelMentions(tv);
@@ -293,7 +307,43 @@ void ChatMessageItemContainer::UpdateTextComponent(Gtk::TextView *tv) {
 Gtk::Widget *ChatMessageItemContainer::CreateEmbedsComponent(const std::vector<EmbedData> &embeds) {
     auto *box = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL));
     for (const auto &embed : embeds) {
-        if (IsEmbedImageOnly(embed)) {
+        if (IsEmbedGIF(embed)) {
+            if (embed.Video.has_value() && (embed.Video->ProxyURL.has_value() || embed.Video->URL.has_value())) {
+                // Tenor/Klipy GIFs are MP4; play inline via GStreamer gtksink
+                int inw = embed.Video->Width.value_or(400);
+                int inh = embed.Video->Height.value_or(300);
+                int w, h;
+                const int clamp_width = Abaddon::Get().GetSettings().ImageEmbedClampWidth;
+                const int clamp_height = Abaddon::Get().GetSettings().ImageEmbedClampHeight;
+                GetImageDimensions(inw, inh, w, h, clamp_width, clamp_height);
+
+                const std::string &video_url = embed.Video->URL.has_value()
+                                                  ? *embed.Video->URL
+                                                  : *embed.Video->ProxyURL;
+                const std::string click_url = embed.URL.value_or(video_url);
+                auto *widget = Gtk::manage(new VideoWidget(video_url, click_url, w, h));
+                widget->show();
+                box->add(*widget);
+            } else if (embed.Thumbnail.has_value() && embed.Thumbnail->ProxyURL.has_value() && embed.Thumbnail->Width.has_value() && embed.Thumbnail->Height.has_value()) {
+                int w = *embed.Thumbnail->Width;
+                int h = *embed.Thumbnail->Height;
+                const std::string url = *embed.Thumbnail->ProxyURL;
+
+                // Check if the proxy URL is a .gif (Tenor) vs static
+                std::string ext = GetExtension(url);
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                bool is_animated = (ext == ".gif");
+
+                auto *widget = CreateImageComponent(url, embed.URL.value_or(url), w, h, is_animated);
+                widget->show();
+                box->add(*widget);
+            } else {
+                // Fallback: render as a normal embed
+                auto *widget = CreateEmbedComponent(embed);
+                widget->show();
+                box->add(*widget);
+            }
+        } else if (IsEmbedImageOnly(embed)) {
             auto *widget = CreateImageComponent(*embed.Thumbnail->ProxyURL, *embed.Thumbnail->URL, *embed.Thumbnail->Width, *embed.Thumbnail->Height);
             widget->show();
             box->add(*widget);
@@ -491,14 +541,15 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
     return ev;
 }
 
-Gtk::Widget *ChatMessageItemContainer::CreateImageComponent(const std::string &proxy_url, const std::string &url, int inw, int inh) {
+Gtk::Widget *ChatMessageItemContainer::CreateImageComponent(const std::string &proxy_url, const std::string &url, int inw, int inh, bool animated) {
     int w, h;
     const int clamp_width = Abaddon::Get().GetSettings().ImageEmbedClampWidth;
     const int clamp_height = Abaddon::Get().GetSettings().ImageEmbedClampHeight;
     GetImageDimensions(inw, inh, w, h, clamp_width, clamp_height);
 
     Gtk::EventBox *ev = Gtk::manage(new Gtk::EventBox);
-    Gtk::Image *widget = Gtk::manage(new LazyImage(proxy_url, w, h, false));
+    LazyImage *widget = Gtk::manage(new LazyImage(proxy_url, w, h, false));
+    if (animated) widget->SetAnimated(true);
     ev->add(*widget);
     ev->set_halign(Gtk::ALIGN_START);
     widget->set_halign(Gtk::ALIGN_START);
@@ -758,6 +809,13 @@ bool ChatMessageItemContainer::IsEmbedImageOnly(const EmbedData &data) {
     return data.Thumbnail->ProxyURL.has_value() && data.Thumbnail->URL.has_value() && data.Thumbnail->Width.has_value() && data.Thumbnail->Height.has_value();
 }
 
+bool ChatMessageItemContainer::IsEmbedGIF(const EmbedData &data) {
+    if (!data.Provider.has_value()) return false;
+    if (!data.Provider->Name.has_value()) return false;
+    const auto &name = *data.Provider->Name;
+    return name == "Tenor" || name == "Klipy";
+}
+
 void ChatMessageItemContainer::HandleChannelMentions(const Glib::RefPtr<Gtk::TextBuffer> &buf) {
     static auto rgx = Glib::Regex::create(R"(<#(\d+)>)");
 
@@ -847,6 +905,28 @@ bool ChatMessageItemContainer::OnTextViewButtonPress(GdkEventButton *ev) {
 
 void ChatMessageItemContainer::on_link_menu_copy() {
     Gtk::Clipboard::get()->set_text(m_selected_link);
+}
+
+void ChatMessageItemContainer::ComputeGIFEmbedURLs(const Message &data) {
+    for (const auto &embed : data.Embeds) {
+        if (!IsEmbedGIF(embed)) continue;
+        if (embed.URL.has_value())
+            m_gif_embed_urls.insert(*embed.URL);
+    }
+}
+
+std::string ChatMessageItemContainer::StripGIFURLs(const std::string &content) const {
+    // Strip any URL that matches a known GIF embed from the content
+    if (m_gif_embed_urls.empty()) return content;
+
+    std::string result = content;
+    for (const auto &gif_url : m_gif_embed_urls) {
+        if (gif_url.empty()) continue;
+        for (size_t pos = result.find(gif_url); pos != std::string::npos; pos = result.find(gif_url, pos)) {
+            result.erase(pos, gif_url.length());
+        }
+    }
+    return result;
 }
 
 void ChatMessageItemContainer::HandleLinks(Gtk::TextView &tv) {

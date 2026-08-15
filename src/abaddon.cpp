@@ -24,6 +24,7 @@
 #include "notifications/notifications.hpp"
 #include "remoteauth/remoteauthdialog.hpp"
 #include "util.hpp"
+#include <gst/gst.h>
 
 #if defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>
@@ -242,6 +243,10 @@ int Abaddon::StartGTK() {
     m_main_window = std::make_unique<MainWindow>();
     m_main_window->set_title(APP_TITLE);
     m_main_window->set_position(Gtk::WIN_POS_CENTER);
+
+    m_main_window->signal_focus_change().connect([this](bool focused) {
+        m_signal_main_window_focus_change.emit(focused);
+    });
 
 #ifdef WITH_LIBHANDY
     gdk_event_handler_set(&MainEventHandler, m_main_window.get(), nullptr);
@@ -841,6 +846,10 @@ bool Abaddon::IsMainWindowActive() {
     return m_main_window->has_toplevel_focus();
 }
 
+Abaddon::type_signal_main_window_focus_change Abaddon::signal_main_window_focus_change() {
+    return m_signal_main_window_focus_change;
+}
+
 Snowflake Abaddon::GetActiveChannelID() const noexcept {
     return m_main_window->GetChatActiveChannel();
 }
@@ -1154,6 +1163,8 @@ void Abaddon::on_window_hide() {
 }
 
 int main(int argc, char **argv) {
+    gst_init(&argc, &argv);
+
     if (std::getenv("ABADDON_NO_FC") == nullptr) {
         Platform::SetupFonts();
     }
